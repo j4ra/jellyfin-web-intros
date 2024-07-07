@@ -5,16 +5,30 @@
     height: 0.28em;
 }
 
+.itemLinearProgress {
+    width: 100%;
+    position: absolute;
+    left: 0;
+    bottom: 0;
+    border-radius: 100px;
+}
+
 .itemProgressBarForeground {
     position: absolute;
     top: 0;
-    left: 0;
     bottom: 0;
+
+    [dir="ltr"] & {
+        left: 0;
+    }
+
+    [dir="rtl"] & {
+        right: 0;
+    }
 }
 
 .indicator {
     border-radius: 100em;
-    display: -webkit-flex;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -32,7 +46,13 @@
 }
 
 .indicator + .indicator {
-    margin-left: 0.25em;
+    [dir="ltr"] & {
+        margin-left: 0.25em;
+    }
+
+    [dir="rtl"] & {
+        margin-right: 0.25em;
+    }
 }
 
 .indicatorIcon {
@@ -43,7 +63,6 @@
 
 .countIndicator {
     border-radius: 100em;
-    display: -webkit-flex;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -55,7 +74,6 @@
 
 .playedIndicator {
     border-radius: 100em;
-    display: -webkit-flex;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -67,7 +85,6 @@
 .videoIndicator {
     background: #444;
     border-radius: 100em;
-    display: -webkit-flex;
     display: flex;
     align-items: center;
     justify-content: center;

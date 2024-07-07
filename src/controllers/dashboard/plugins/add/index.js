@@ -1,12 +1,15 @@
 import 'jquery';
-import { marked } from 'marked';
+import markdownIt from 'markdown-it';
 import DOMPurify from 'dompurify';
 import loading from '../../../../components/loading/loading';
 import globalize from '../../../../scripts/globalize';
-import '../../../../elements/emby-button/emby-button';
-import Dashboard from '../../../../scripts/clientUtils';
+import Dashboard from '../../../../utils/dashboard';
 import alert from '../../../../components/alert';
 import confirm from '../../../../components/confirm/confirm';
+
+import 'elements/emby-button/emby-button';
+import 'elements/emby-collapse/emby-collapse';
+import 'elements/emby-select/emby-select';
 
 function populateHistory(packageInfo, page) {
     let html = '';
@@ -15,7 +18,7 @@ function populateHistory(packageInfo, page) {
     for (let i = 0; i < length; i++) {
         const version = packageInfo.versions[i];
         html += '<h2 style="margin:.5em 0;">' + version.version + '</h2>';
-        html += '<div style="margin-bottom:1.5em;">' + DOMPurify.sanitize(marked(version.changelog)) + '</div>';
+        html += '<div style="margin-bottom:1.5em;">' + DOMPurify.sanitize(markdownIt({ html: true }).render(version.changelog)) + '</div>';
     }
 
     $('#revisionHistory', page).html(html);
@@ -28,8 +31,7 @@ function populateVersions(packageInfo, page, installedPlugin) {
         return b.timestamp < a.timestamp ? -1 : 1;
     });
 
-    for (let i = 0; i < packageInfo.versions.length; i++) {
-        const version = packageInfo.versions[i];
+    for (const version of packageInfo.versions) {
         html += '<option value="' + version.version + '">' + globalize.translate('PluginFromRepo', version.version, version.repositoryName) + '</option>';
     }
 
