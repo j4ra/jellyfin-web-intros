@@ -1,16 +1,15 @@
 import escapeHtml from 'escape-html';
 import datetime from '../../scripts/datetime';
-import backdrop from '../backdrop/backdrop';
+import { clearBackdrop, setBackdrops } from '../backdrop/backdrop';
 import listView from '../listview/listview';
 import imageLoader from '../images/imageLoader';
 import { playbackManager } from '../playback/playbackmanager';
 import nowPlayingHelper from '../playback/nowplayinghelper';
-import { Events } from 'jellyfin-apiclient';
+import Events from '../../utils/events.ts';
 import { appHost } from '../apphost';
 import globalize from '../../scripts/globalize';
 import layoutManager from '../layoutManager';
 import * as userSettings from '../../scripts/settings/userSettings';
-import cardBuilder from '../cardbuilder/cardBuilder';
 import itemContextMenu from '../itemContextMenu';
 import '../cardbuilder/card.scss';
 import '../../elements/emby-button/emby-button';
@@ -21,9 +20,8 @@ import '../../elements/emby-ratingbutton/emby-ratingbutton';
 import '../../elements/emby-slider/emby-slider';
 import ServerConnections from '../ServerConnections';
 import toast from '../toast/toast';
-import { appRouter } from '../appRouter';
-
-/*eslint prefer-const: "error"*/
+import { appRouter } from '../router/appRouter';
+import { getDefaultBackgroundClass } from '../cardbuilder/cardBuilderUtils';
 
 let showMuteButton = true;
 let showVolumeSlider = true;
@@ -49,7 +47,7 @@ function showAudioMenu(context, player, button) {
             items: menuItems,
             positionTo: button,
             callback: function (id) {
-                playbackManager.setAudioStreamIndex(parseInt(id), player);
+                playbackManager.setAudioStreamIndex(parseInt(id, 10), player);
             }
         });
     });
@@ -81,7 +79,7 @@ function showSubtitleMenu(context, player, button) {
             items: menuItems,
             positionTo: button,
             callback: function (id) {
-                playbackManager.setSubtitleStreamIndex(parseInt(id), player);
+                playbackManager.setSubtitleStreamIndex(parseInt(id, 10), player);
             }
         });
     });
@@ -124,7 +122,7 @@ function imageUrl(item, options) {
     options = options || {};
     options.type = options.type || 'Primary';
 
-    if (item.ImageTags && item.ImageTags[options.type]) {
+    if (item.ImageTags?.[options.type]) {
         options.tag = item.ImageTags[options.type];
         return ServerConnections.getApiClient(item.ServerId).getScaledImageUrl(item.PrimaryImageItemId || item.Id, options);
     }
@@ -142,13 +140,13 @@ function updateNowPlayingInfo(context, state, serverId) {
     const displayName = item ? getNowPlayingNameHtml(item).replace('<br/>', ' - ') : '';
     if (item) {
         const nowPlayingServerId = (item.ServerId || serverId);
-        if (item.Type == 'Audio' || item.MediaStreams[0].Type == 'Audio') {
+        if (item.Type == 'AudioBook' || item.Type == 'Audio' || item.MediaStreams[0].Type == 'Audio') {
             let artistsSeries = '';
             let albumName = '';
             if (item.Artists != null) {
                 if (item.ArtistItems != null) {
                     for (const artist of item.ArtistItems) {
-                        artistsSeries += `<a class="button-link emby-button" is="emby-linkbutton" href="#!/details?id=${artist.Id}&serverId=${nowPlayingServerId}">${escapeHtml(artist.Name)}</a>`;
+                        artistsSeries += `<a class="button-link emby-button" is="emby-linkbutton" href="#/details?id=${artist.Id}&serverId=${nowPlayingServerId}">${escapeHtml(artist.Name)}</a>`;
                         if (artist !== item.ArtistItems.slice(-1)[0]) {
                             artistsSeries += ', ';
                         }
@@ -166,7 +164,7 @@ function updateNowPlayingInfo(context, state, serverId) {
                 }
             }
             if (item.Album != null) {
-                albumName = '<a class="button-link emby-button" is="emby-linkbutton" href="#!/details?id=' + item.AlbumId + `&serverId=${nowPlayingServerId}">` + escapeHtml(item.Album) + '</a>';
+                albumName = '<a class="button-link emby-button" is="emby-linkbutton" href="#/details?id=' + item.AlbumId + `&serverId=${nowPlayingServerId}">` + escapeHtml(item.Album) + '</a>';
             }
             context.querySelector('.nowPlayingAlbum').innerHTML = albumName;
             context.querySelector('.nowPlayingArtist').innerHTML = artistsSeries;
@@ -174,12 +172,12 @@ function updateNowPlayingInfo(context, state, serverId) {
         } else if (item.Type == 'Episode') {
             if (item.SeasonName != null) {
                 const seasonName = item.SeasonName;
-                context.querySelector('.nowPlayingSeason').innerHTML = '<a class="button-link emby-button" is="emby-linkbutton" href="#!/details?id=' + item.SeasonId + `&serverId=${nowPlayingServerId}">${escapeHtml(seasonName)}</a>`;
+                context.querySelector('.nowPlayingSeason').innerHTML = '<a class="button-link emby-button" is="emby-linkbutton" href="#/details?id=' + item.SeasonId + `&serverId=${nowPlayingServerId}">${escapeHtml(seasonName)}</a>`;
             }
             if (item.SeriesName != null) {
                 const seriesName = item.SeriesName;
                 if (item.SeriesId != null) {
-                    context.querySelector('.nowPlayingSerie').innerHTML = '<a class="button-link emby-button" is="emby-linkbutton" href="#!/details?id=' + item.SeriesId + `&serverId=${nowPlayingServerId}">${escapeHtml(seriesName)}</a>`;
+                    context.querySelector('.nowPlayingSerie').innerHTML = '<a class="button-link emby-button" is="emby-linkbutton" href="#/details?id=' + item.SeriesId + `&serverId=${nowPlayingServerId}">${escapeHtml(seriesName)}</a>`;
                 } else {
                     context.querySelector('.nowPlayingSerie').innerText = seriesName;
                 }
@@ -224,21 +222,23 @@ function updateNowPlayingInfo(context, state, serverId) {
                 contextButton.addEventListener('click', function () {
                     itemContextMenu.show(Object.assign({
                         item: fullItem,
-                        user: user
-                    }, options));
+                        user: user,
+                        isMobile: layoutManager.mobile
+                    }, options))
+                        .catch(() => { /* no-op */ });
                 });
             });
         });
         setImageUrl(context, state, url);
-        backdrop.setBackdrops([item]);
+        setBackdrops([item]);
         apiClient.getItem(apiClient.getCurrentUserId(), item.Id).then(function (fullItem) {
             const userData = fullItem.UserData || {};
             const likes = userData.Likes == null ? '' : userData.Likes;
-            context.querySelector('.nowPlayingPageUserDataButtonsTitle').innerHTML = '<button is="emby-ratingbutton" type="button" class="listItemButton paper-icon-button-light" data-id="' + fullItem.Id + '" data-serverid="' + fullItem.ServerId + '" data-itemtype="' + fullItem.Type + '" data-likes="' + likes + '" data-isfavorite="' + userData.IsFavorite + '"><span class="material-icons favorite" aria-hidden="true"></span></button>';
-            context.querySelector('.nowPlayingPageUserDataButtons').innerHTML = '<button is="emby-ratingbutton" type="button" class="listItemButton paper-icon-button-light" data-id="' + fullItem.Id + '" data-serverid="' + fullItem.ServerId + '" data-itemtype="' + fullItem.Type + '" data-likes="' + likes + '" data-isfavorite="' + userData.IsFavorite + '"><span class="material-icons favorite" aria-hidden="true"></span></button>';
+            context.querySelector('.nowPlayingPageUserDataButtonsTitle').innerHTML = '<button is="emby-ratingbutton" type="button" class="paper-icon-button-light" data-id="' + fullItem.Id + '" data-serverid="' + fullItem.ServerId + '" data-itemtype="' + fullItem.Type + '" data-likes="' + likes + '" data-isfavorite="' + userData.IsFavorite + '"><span class="material-icons favorite" aria-hidden="true"></span></button>';
+            context.querySelector('.nowPlayingPageUserDataButtons').innerHTML = '<button is="emby-ratingbutton" type="button" class="paper-icon-button-light" data-id="' + fullItem.Id + '" data-serverid="' + fullItem.ServerId + '" data-itemtype="' + fullItem.Type + '" data-likes="' + likes + '" data-isfavorite="' + userData.IsFavorite + '"><span class="material-icons favorite" aria-hidden="true"></span></button>';
         });
     } else {
-        backdrop.clearBackdrop();
+        clearBackdrop();
         context.querySelector('.nowPlayingPageUserDataButtons').innerHTML = '';
     }
 }
@@ -253,7 +253,7 @@ function setImageUrl(context, state, url) {
         context.querySelector('.nowPlayingPageImage').classList.toggle('nowPlayingPageImageAudio', item.Type === 'Audio');
         context.querySelector('.nowPlayingPageImage').classList.toggle('nowPlayingPageImagePoster', item.Type !== 'Audio');
     } else {
-        imgContainer.innerHTML = '<div class="nowPlayingPageImageContainerNoAlbum"><button data-action="link" class="cardImageContainer coveredImage ' + cardBuilder.getDefaultBackgroundClass(item.Name) + ' cardContent cardContent-shadow itemAction"><span class="cardImageIcon material-icons album" aria-hidden="true"></span></button></div>';
+        imgContainer.innerHTML = '<div class="nowPlayingPageImageContainerNoAlbum"><button data-action="link" class="cardImageContainer coveredImage ' + getDefaultBackgroundClass(item.Name) + ' cardContent cardContent-shadow itemAction"><span class="cardImageIcon material-icons album" aria-hidden="true"></span></button></div>';
     }
 }
 
@@ -324,16 +324,18 @@ export default function () {
             context.querySelector('.remoteControlSection').classList.add('hide');
         }
 
+        buttonVisible(context.querySelector('.btnLyrics'), item?.Type === 'Audio' && !layoutManager.mobile);
         buttonVisible(context.querySelector('.btnStop'), item != null);
         buttonVisible(context.querySelector('.btnNextTrack'), item != null);
         buttonVisible(context.querySelector('.btnPreviousTrack'), item != null);
         if (layoutManager.mobile) {
             const playingVideo = playbackManager.isPlayingVideo() && item !== null;
             const playingAudio = !playbackManager.isPlayingVideo() && item !== null;
-            buttonVisible(context.querySelector('.btnRepeat'), playingAudio);
-            buttonVisible(context.querySelector('.btnShuffleQueue'), playingAudio);
-            buttonVisible(context.querySelector('.btnRewind'), playingVideo);
-            buttonVisible(context.querySelector('.btnFastForward'), playingVideo);
+            const playingAudioBook = playingAudio && item.Type == 'AudioBook';
+            buttonVisible(context.querySelector('.btnRepeat'), playingAudio && !playingAudioBook);
+            buttonVisible(context.querySelector('.btnShuffleQueue'), playingAudio && !playingAudioBook);
+            buttonVisible(context.querySelector('.btnRewind'), playingVideo || playingAudioBook);
+            buttonVisible(context.querySelector('.btnFastForward'), playingVideo || playingAudioBook);
             buttonVisible(context.querySelector('.nowPlayingSecondaryButtons .btnShuffleQueue'), playingVideo);
             buttonVisible(context.querySelector('.nowPlayingSecondaryButtons .btnRepeat'), playingVideo);
         } else {
@@ -459,6 +461,11 @@ export default function () {
         btnPlayPauseIcon.classList.remove('play_circle_filled', 'pause_circle_filled');
         btnPlayPauseIcon.classList.add(isPaused ? 'play_circle_filled' : 'pause_circle_filled');
 
+        const playlistIndicator = context.querySelector('.playlistIndexIndicatorImage');
+        if (playlistIndicator) {
+            playlistIndicator.classList.toggle('playlistIndexIndicatorPausedImage', isPaused);
+        }
+
         buttonVisible(btnPlayPause, isActive);
     }
 
@@ -476,8 +483,8 @@ export default function () {
             }
         }
 
-        context.querySelector('.positionTime').innerHTML = positionTicks == null ? '--:--' : datetime.getDisplayRunningTime(positionTicks);
-        context.querySelector('.runtime').innerHTML = runtimeTicks != null ? datetime.getDisplayRunningTime(runtimeTicks) : '--:--';
+        context.querySelector('.positionTime').innerHTML = Number.isFinite(positionTicks) ? datetime.getDisplayRunningTime(positionTicks) : '--:--';
+        context.querySelector('.runtime').innerHTML = Number.isFinite(runtimeTicks) ? datetime.getDisplayRunningTime(runtimeTicks) : '--:--';
     }
 
     function getPlaylistItems(player) {
@@ -529,6 +536,7 @@ export default function () {
                 if (img) {
                     img.classList.remove('lazy');
                     img.classList.add('playlistIndexIndicatorImage');
+                    img.classList.toggle('playlistIndexIndicatorPausedImage', playbackManager.paused());
                 }
             }
 
@@ -613,7 +621,7 @@ export default function () {
     function onTimeUpdate() {
         const now = new Date().getTime();
 
-        if (!(now - lastUpdateTime < 700)) {
+        if (now - lastUpdateTime >= 700) {
             lastUpdateTime = now;
             const player = this;
             currentRuntimeTicks = playbackManager.duration(player);
@@ -647,7 +655,10 @@ export default function () {
     }
 
     function bindToPlayer(context, player) {
-        if (releaseCurrentPlayer(), currentPlayer = player, player) {
+        releaseCurrentPlayer();
+        currentPlayer = player;
+
+        if (player) {
             const state = playbackManager.getPlayerState(player);
             onStateChanged.call(player, {
                 type: 'init'
@@ -692,18 +703,23 @@ export default function () {
     }
 
     function savePlaylist() {
-        import('../playlisteditor/playlisteditor').then(({ default: playlistEditor }) => {
+        import('../playlisteditor/playlisteditor').then(({ default: PlaylistEditor }) => {
             getSaveablePlaylistItems().then(function (items) {
                 const serverId = items.length ? items[0].ServerId : ApiClient.serverId();
-                new playlistEditor({
+                const playlistEditor = new PlaylistEditor();
+                playlistEditor.show({
                     items: items.map(function (i) {
                         return i.Id;
                     }),
                     serverId: serverId,
                     enableAddToPlayQueue: false,
                     defaultValue: 'new'
+                }).catch(() => {
+                    // Dialog closed
                 });
             });
+        }).catch(err => {
+            console.error('[savePlaylist] failed to load playlist editor', err);
         });
     }
 
@@ -755,6 +771,10 @@ export default function () {
                 playbackManager.fastForward(currentPlayer);
             }
         });
+        context.querySelector('.btnLyrics').addEventListener('click', function () {
+            appRouter.show('lyrics');
+        });
+
         for (const shuffleButton of context.querySelectorAll('.btnShuffleQueue')) {
             shuffleButton.addEventListener('click', function () {
                 if (currentPlayer) {
@@ -765,18 +785,25 @@ export default function () {
 
         context.querySelector('.btnPreviousTrack').addEventListener('click', function (e) {
             if (currentPlayer) {
-                if (lastPlayerState.NowPlayingItem.MediaType === 'Audio' && (currentPlayer._currentTime >= 5 || !playbackManager.previousTrack(currentPlayer))) {
-                    // Cancel this event if doubleclick is fired
-                    if (e.detail > 1 && playbackManager.previousTrack(currentPlayer)) {
+                if (playbackManager.isPlayingAudio(currentPlayer)) {
+                    // Cancel this event if doubleclick is fired. The actual previousTrack will be processed by the 'dblclick' event
+                    if (e.detail > 1 ) {
                         return;
                     }
-                    playbackManager.seekPercent(0, currentPlayer);
-                    // This is done automatically by playbackManager. However, setting this here gives instant visual feedback.
-                    // TODO: Check why seekPercentage doesn't reflect the changes inmmediately, so we can remove this workaround.
-                    positionSlider.value = 0;
-                } else {
-                    playbackManager.previousTrack(currentPlayer);
+
+                    // Return to start of track, unless we are already (almost) at the beginning. In the latter case, continue and move
+                    // to the previous track, unless we are at the first track so no previous track exists.
+                    // currentTime is in msec.
+
+                    if (playbackManager.currentTime(currentPlayer) >= 5 * 1000 || playbackManager.getCurrentPlaylistIndex(currentPlayer) <= 0) {
+                        playbackManager.seekPercent(0, currentPlayer);
+                        // This is done automatically by playbackManager, however, setting this here gives instant visual feedback.
+                        // TODO: Check why seekPercent doesn't reflect the changes inmmediately, so we can remove this workaround.
+                        positionSlider.value = 0;
+                        return;
+                    }
                 }
+                playbackManager.previousTrack(currentPlayer);
             }
         });
 
@@ -797,7 +824,7 @@ export default function () {
         positionSlider.getBubbleText = function (value) {
             const state = lastPlayerState;
 
-            if (!state || !state.NowPlayingItem || !currentRuntimeTicks) {
+            if (!state?.NowPlayingItem || !currentRuntimeTicks) {
                 return '--:--';
             }
 

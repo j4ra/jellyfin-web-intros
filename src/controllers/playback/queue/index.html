@@ -18,7 +18,7 @@
 
                 </div>
 
-                <div class="sliderContainer flex">
+                <div class="sliderContainer flex" dir="ltr">
                     <div class="positionTime"></div>
                         <div class="nowPlayingPositionSliderContainer">
                             <input type="range" is="emby-slider" pin step="1" min="0" max="100" value="0" class="nowPlayingPositionSlider" data-slider-keep-progress="true" />
@@ -28,7 +28,7 @@
 
                 <div class="nowPlayingButtonsContainer focuscontainer-x justify-content-space-between">
 
-                    <div class="nowPlayingInfoButtons">
+                    <div class="nowPlayingInfoButtons" dir="ltr">
 
                         <button is="paper-icon-button-light" class="btnCommand btnRepeat repeatToggleButton autoSize" title="${Repeat}"
                             data-command="SetRepeatMode">
@@ -79,6 +79,10 @@
 
                         <button is="paper-icon-button-light" class="btnToggleFullscreen videoButton btnPlayStateCommand autoSize" title="${ButtonFullscreen}" data-command="ToggleFullscreen">
                             <span class="material-icons fullscreen" aria-hidden="true"></span>
+                        </button>
+
+                        <button is="paper-icon-button-light" class="btnLyrics autoSize hide" title="${Lyrics}">
+                            <span class="material-icons lyrics" style="top:0.05em" aria-hidden="true"></span>
                         </button>
 
                         <button is="paper-icon-button-light" class="btnShuffleQueue autoSize" title="${Shuffle}">

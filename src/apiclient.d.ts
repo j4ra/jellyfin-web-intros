@@ -67,7 +67,8 @@ declare module 'jellyfin-apiclient' {
         UserPolicy,
         UtcTimeResponse,
         VirtualFolderInfo
-    } from '@thornbill/jellyfin-sdk/dist/generated-client';
+    } from '@jellyfin/sdk/lib/generated-client';
+    import { ConnectionState } from './utils/jellyfin-apiclient/ConnectionState';
 
     class ApiClient {
         constructor(serverAddress: string, appName: string, appVersion: string, deviceName: string, deviceId: string);
@@ -75,6 +76,7 @@ declare module 'jellyfin-apiclient' {
         accessToken(): string;
         addMediaPath(virtualFolderName: string, mediaPath: string, networkSharePath: string, refreshLibrary?: boolean): Promise<void>;
         addVirtualFolder(name: string, type?: string, refreshLibrary?: boolean, libraryOptions?: any): Promise<void>;
+        ajax(request: any): Promise<any>;
         appName(): string;
         appVersion(): string;
         authenticateUserByName(name: string, password: string): Promise<AuthenticationResult>;
@@ -116,6 +118,7 @@ declare module 'jellyfin-apiclient' {
         getCountries(): Promise<CountryInfo[]>;
         getCriticReviews(itemId: string, options?: any): Promise<BaseItemDtoQueryResult>;
         getCultures(): Promise<CultureDto[]>;
+        getCurrentUser(cache?: boolean): Promise<UserDto>;
         getCurrentUserId(): string;
         getDateParamValue(date: Date): string;
         getDefaultImageQuality(imageType: ImageType): number;
@@ -266,7 +269,7 @@ declare module 'jellyfin-apiclient' {
         sendWebSocketMessage(name: string, data: any): void;
         serverAddress(val?: string): string;
         serverId(): string;
-        serverVersion(): string
+        serverVersion(): string;
         setAuthenticationInfo(accessKey?: string, userId?: string): void;
         setRequestHeaders(headers: any): void;
         setSystemInfo(info: SystemInfo): void;
@@ -310,12 +313,18 @@ declare module 'jellyfin-apiclient' {
         setItem(name: string, value: string): void;
     }
 
+    interface ConnectResponse {
+        ApiClient: ApiClient
+        Servers: any[]
+        State: ConnectionState
+    }
+
     class ConnectionManager {
         constructor(credentialProvider: Credentials, appName: string, appVersion: string, deviceName: string, deviceId: string, capabilities: ClientCapabilities);
 
         addApiClient(apiClient: ApiClient): void;
         clearData(): void;
-        connect(options?: any): Promise<any>;
+        connect(options?: any): Promise<ConnectResponse>;
         connectToAddress(address: string, options?: any): Promise<any>;
         connectToServer(server: any, options?: any): Promise<any>;
         connectToServers(servers: any[], options?: any): Promise<any>;

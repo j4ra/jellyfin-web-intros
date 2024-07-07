@@ -8,7 +8,7 @@ config.json
 
 # ide
 .idea
-.vscode
+.vs
 
 # log
 yarn-error.log

@@ -46,15 +46,8 @@ function init(instance) {
             if (inputOffset) {
                 inputOffset = inputOffset[0];
                 inputOffset = parseFloat(inputOffset);
-                inputOffset = Math.min(30, Math.max(-30, inputOffset));
 
-                // replace current text by considered offset
-                this.textContent = inputOffset + 's';
-                // set new offset
-                playbackManager.setSubtitleOffset(inputOffset, player);
-                // synchronize with slider value
-                subtitleSyncSlider.updateOffset(
-                    getSliderValueFromOffset(inputOffset));
+                subtitleSyncSlider.updateOffset(inputOffset);
             } else {
                 this.textContent = (playbackManager.getPlayerSubtitleOffset(player) || 0) + 's';
             }
@@ -79,24 +72,27 @@ function init(instance) {
         }
     };
 
+    function updateSubtitleOffset() {
+        const value = parseFloat(subtitleSyncSlider.value);
+        // set new offset
+        playbackManager.setSubtitleOffset(value, player);
+        // synchronize with textField value
+        subtitleSyncTextField.updateOffset(value);
+    }
+
     subtitleSyncSlider.updateOffset = function (sliderValue) {
         // default value is 0s = 0ms
         this.value = sliderValue === undefined ? 0 : sliderValue;
+
+        updateSubtitleOffset();
     };
 
-    subtitleSyncSlider.addEventListener('change', function () {
-        // set new offset
-        playbackManager.setSubtitleOffset(getOffsetFromSliderValue(this.value), player);
-        // synchronize with textField value
-        subtitleSyncTextField.updateOffset(
-            getOffsetFromSliderValue(this.value));
-    });
+    subtitleSyncSlider.addEventListener('change', () => updateSubtitleOffset());
 
-    subtitleSyncSlider.getBubbleHtml = function (value) {
-        const newOffset = getOffsetFromPercentage(value);
-        return '<h1 class="sliderBubbleText">' +
-            (newOffset > 0 ? '+' : '') + parseFloat(newOffset) + 's' +
-            '</h1>';
+    subtitleSyncSlider.getBubbleHtml = function (_, value) {
+        return '<h1 class="sliderBubbleText">'
+            + (value > 0 ? '+' : '') + parseFloat(value) + 's'
+            + '</h1>';
     };
 
     subtitleSyncCloseButton.addEventListener('click', function () {
@@ -105,25 +101,6 @@ function init(instance) {
     });
 
     instance.element = parent;
-}
-
-function getOffsetFromPercentage(value) {
-    // convert percentage to fraction
-    let offset = (value - 50) / 50;
-    // multiply by offset min/max range value (-x to +x) :
-    offset *= 30;
-    return offset.toFixed(1);
-}
-
-function getOffsetFromSliderValue(value) {
-    // convert slider value to offset
-    const offset = value / 10;
-    return offset.toFixed(1);
-}
-
-function getSliderValueFromOffset(value) {
-    const sliderValue = value * 10;
-    return Math.min(300, Math.max(-300, sliderValue.toFixed(1)));
 }
 
 class SubtitleSync {
@@ -146,33 +123,32 @@ class SubtitleSync {
     }
 
     toggle(action) {
+        if (action && !['hide', 'forceToHide'].includes(action)) {
+            console.warn('SubtitleSync.toggle called with invalid action', action);
+            return;
+        }
+
         if (player && playbackManager.supportSubtitleOffset(player)) {
-            /* eslint-disable no-fallthrough */
-            switch (action) {
-                case undefined:
-                    // if showing subtitle sync is enabled and if there is an external subtitle stream enabled
-                    if (playbackManager.isShowingSubtitleOffsetEnabled(player) && playbackManager.canHandleOffsetOnCurrentSubtitle(player)) {
-                        // if no subtitle offset is defined or element has focus (offset being defined)
-                        if (!(playbackManager.getPlayerSubtitleOffset(player) || subtitleSyncTextField.hasFocus)) {
-                            // set default offset to '0' = 0ms
-                            subtitleSyncSlider.value = '0';
-                            subtitleSyncTextField.textContent = '0s';
-                            playbackManager.setSubtitleOffset(0, player);
-                        }
-                        // show subtitle sync
-                        subtitleSyncContainer.classList.remove('hide');
-                        break; // stop here
-                    } // else continue and hide
-                case 'hide':
-                    // only break if element has focus
-                    if (subtitleSyncTextField.hasFocus) {
-                        break;
+            if (!action) {
+                // if showing subtitle sync is enabled and if there is an external subtitle stream enabled
+                if (playbackManager.isShowingSubtitleOffsetEnabled(player) && playbackManager.canHandleOffsetOnCurrentSubtitle(player)) {
+                    // if no subtitle offset is defined or element has focus (offset being defined)
+                    if (!(playbackManager.getPlayerSubtitleOffset(player) || subtitleSyncTextField.hasFocus)) {
+                        // set default offset to '0' = 0ms
+                        subtitleSyncSlider.value = '0';
+                        subtitleSyncTextField.textContent = '0s';
+                        playbackManager.setSubtitleOffset(0, player);
                     }
-                case 'forceToHide':
-                    subtitleSyncContainer.classList.add('hide');
-                    break;
+                    // show subtitle sync
+                    subtitleSyncContainer.classList.remove('hide');
+                    return;
+                }
+            } else if (action === 'hide' && subtitleSyncTextField.hasFocus) {
+                // do not hide if element has focus
+                return;
             }
-            /* eslint-enable no-fallthrough */
+
+            subtitleSyncContainer.classList.add('hide');
         }
     }
 }
