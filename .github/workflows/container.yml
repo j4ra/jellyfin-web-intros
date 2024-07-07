@@ -18,7 +18,7 @@ jobs:
 
     strategy:
       matrix:
-        node-version: [18.x]
+        node-version: [20.x]
         jellyfin-container-version: [10.9.7]
         jellyfin-web-version: [10.9.7]
 
