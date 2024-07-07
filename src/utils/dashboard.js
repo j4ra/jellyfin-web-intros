@@ -1,7 +1,7 @@
 import ServerConnections from '../components/ServerConnections';
 import toast from '../components/toast/toast';
 import loading from '../components/loading/loading';
-import { appRouter } from '../components/appRouter';
+import { appRouter } from '../components/router/appRouter';
 import baseAlert from '../components/alert';
 import baseConfirm from '../components/confirm/confirm';
 import globalize from '../scripts/globalize';
@@ -12,6 +12,8 @@ import DirectoryBrowser from '../components/directorybrowser/directorybrowser';
 import dialogHelper from '../components/dialogHelper/dialogHelper';
 import itemIdentifier from '../components/itemidentifier/itemidentifier';
 import { getLocationSearch } from './url.ts';
+import { queryClient } from './query/queryClient';
+import viewContainer from 'components/viewContainer';
 
 export function getCurrentUser() {
     return window.ApiClient.getCurrentUser(false);
@@ -50,30 +52,35 @@ export async function serverAddress() {
     console.debug('URL candidates:', urls);
 
     const promises = urls.map(url => {
-        return fetch(`${url}/System/Info/Public`).then(resp => {
-            return {
-                url: url,
-                response: resp
-            };
-        }).catch(() => {
-            return Promise.resolve();
-        });
+        return fetch(`${url}/System/Info/Public`)
+            .then(async resp => {
+                if (!resp.ok) {
+                    return;
+                }
+
+                let config;
+                try {
+                    config = await resp.json();
+                } catch (err) {
+                    return;
+                }
+
+                return {
+                    url,
+                    config
+                };
+            }).catch(error => {
+                console.error(error);
+            });
     });
 
     return Promise.all(promises).then(responses => {
-        responses = responses.filter(obj => obj && obj.response.ok);
-        return Promise.all(responses.map(obj => {
-            return {
-                url: obj.url,
-                config: obj.response.json()
-            };
-        }));
+        return responses.filter(obj => obj?.config);
     }).then(configs => {
         const selection = configs.find(obj => !obj.config.StartupWizardCompleted) || configs[0];
-        return Promise.resolve(selection?.url);
+        return selection?.url;
     }).catch(error => {
-        console.log(error);
-        return Promise.resolve();
+        console.error(error);
     });
 }
 
@@ -93,6 +100,10 @@ export function onServerChanged(_userId, _accessToken, apiClient) {
 
 export function logout() {
     ServerConnections.logout().then(function () {
+        // Clear the query cache
+        queryClient.clear();
+        // Reset cached views
+        viewContainer.reset();
         webSettings.getMultiServer().then(multi => {
             multi ? navigate('selectserver.html') : navigate('login.html');
         });
@@ -109,6 +120,12 @@ export function getConfigurationResourceUrl(name) {
     });
 }
 
+/**
+ * Navigate to a url.
+ * @param {string} url - The url to navigate to.
+ * @param {boolean} [preserveQueryString] - A flag to indicate the current query string should be appended to the new url.
+ * @returns {Promise<any>}
+ */
 export function navigate(url, preserveQueryString) {
     if (!url) {
         throw new Error('url cannot be null or empty');

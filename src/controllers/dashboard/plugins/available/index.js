@@ -1,11 +1,12 @@
+import escapeHTML from 'escape-html';
+
 import loading from '../../../../components/loading/loading';
-import libraryMenu from '../../../../scripts/libraryMenu';
 import globalize from '../../../../scripts/globalize';
-import * as cardBuilder from '../../../../components/cardbuilder/cardBuilder.js';
 import '../../../../components/cardbuilder/card.scss';
 import '../../../../elements/emby-button/emby-button';
 import '../../../../elements/emby-checkbox/emby-checkbox';
 import '../../../../elements/emby-select/emby-select';
+import { getDefaultBackgroundClass } from '../../../../components/cardbuilder/cardBuilderUtils';
 
 function reloadList(page) {
     loading.show();
@@ -64,8 +65,7 @@ function populateList(options) {
     let currentCategory = null;
     let html = '';
 
-    for (let i = 0; i < availablePlugins.length; i++) {
-        const plugin = availablePlugins[i];
+    for (const plugin of availablePlugins) {
         const category = plugin.categoryDisplayName;
         if (category != currentCategory) {
             if (currentCategory) {
@@ -73,7 +73,7 @@ function populateList(options) {
                 html += '</div>';
             }
             html += '<div class="verticalSection">';
-            html += '<h2 class="sectionTitle sectionTitle-cards">' + category + '</h2>';
+            html += '<h2 class="sectionTitle sectionTitle-cards">' + escapeHTML(category) + '</h2>';
             html += '<div class="itemsContainer vertical-wrap">';
             currentCategory = category;
         }
@@ -86,13 +86,40 @@ function populateList(options) {
         options.noItemsElement.classList.remove('hide');
     }
 
+    const searchBar = document.getElementById('txtSearchPlugins');
+    if (searchBar) {
+        searchBar.addEventListener('input', () => onSearchBarType(searchBar));
+    }
+
     options.catalogElement.innerHTML = html;
     loading.hide();
 }
 
+function onSearchBarType(searchBar) {
+    const filter = searchBar.value.toLowerCase();
+    for (const header of document.querySelectorAll('div .verticalSection')) {
+        // keep track of shown cards after each search
+        let shown = 0;
+        for (const card of header.querySelectorAll('div .card')) {
+            if (filter && filter != '' && !card.textContent.toLowerCase().includes(filter)) {
+                card.style.display = 'none';
+            } else {
+                card.style.display = 'unset';
+                shown++;
+            }
+        }
+        // hide title if no cards are shown
+        if (shown <= 0) {
+            header.style.display = 'none';
+        } else {
+            header.style.display = 'unset';
+        }
+    }
+}
+
 function getPluginHtml(plugin, options, installedPlugins) {
     let html = '';
-    let href = plugin.externalUrl ? plugin.externalUrl : '#/addplugin.html?name=' + encodeURIComponent(plugin.name) + '&guid=' + plugin.guid;
+    let href = plugin.externalUrl ? plugin.externalUrl : '#/dashboard/plugins/add?name=' + encodeURIComponent(plugin.name) + '&guid=' + plugin.guid;
 
     if (options.context) {
         href += '&context=' + options.context;
@@ -107,9 +134,9 @@ function getPluginHtml(plugin, options, installedPlugins) {
     html += `<a class="cardImageContainer" is="emby-linkbutton" style="margin:0;padding:0" href="${href}" ${target}>`;
 
     if (plugin.imageUrl) {
-        html += `<img src="${plugin.imageUrl}" style="width:100%" />`;
+        html += `<img src="${escapeHTML(plugin.imageUrl)}" style="width:100%" />`;
     } else {
-        html += `<div class="cardImage flex align-items-center justify-content-center ${cardBuilder.getDefaultBackgroundClass()}">`;
+        html += `<div class="cardImage flex align-items-center justify-content-center ${getDefaultBackgroundClass()}">`;
         html += '<span class="cardImageIcon material-icons extension" aria-hidden="true"></span>';
         html += '</div>';
     }
@@ -119,35 +146,20 @@ function getPluginHtml(plugin, options, installedPlugins) {
     html += '</div>';
     html += '<div class="cardFooter">';
     html += "<div class='cardText'>";
-    html += plugin.name;
+    html += escapeHTML(plugin.name);
     html += '</div>';
-    const installedPlugin = installedPlugins.filter(function (ip) {
-        return ip.Id == plugin.guid;
-    })[0];
+    const installedPlugin = installedPlugins.find(installed => installed.Id === plugin.guid);
     html += "<div class='cardText cardText-secondary'>";
     html += installedPlugin ? globalize.translate('LabelVersionInstalled', installedPlugin.Version) : '&nbsp;';
     html += '</div>';
     html += '</div>';
     html += '</div>';
-    return html += '</div>';
-}
-
-function getTabs() {
-    return [{
-        href: '#/installedplugins.html',
-        name: globalize.translate('TabMyPlugins')
-    }, {
-        href: '#/availableplugins.html',
-        name: globalize.translate('TabCatalog')
-    }, {
-        href: '#/repositories.html',
-        name: globalize.translate('TabRepositories')
-    }];
+    html += '</div>';
+    return html;
 }
 
 export default function (view) {
     view.addEventListener('viewshow', function () {
-        libraryMenu.setTabs('plugins', 1, getTabs);
         reloadList(this);
     });
 }

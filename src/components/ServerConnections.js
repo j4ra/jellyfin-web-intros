@@ -1,7 +1,9 @@
-import { ConnectionManager, Credentials, ApiClient, Events } from 'jellyfin-apiclient';
+import { MINIMUM_VERSION } from '@jellyfin/sdk/lib/versions';
+import { ConnectionManager, Credentials, ApiClient } from 'jellyfin-apiclient';
 
 import { appHost } from './apphost';
 import Dashboard from '../utils/dashboard';
+import Events from '../utils/events.ts';
 import { setUserInfo } from '../scripts/settings/userSettings';
 import appSettings from '../scripts/settings/appSettings';
 
@@ -32,8 +34,13 @@ class ServerConnections extends ConnectionManager {
         super(...arguments);
         this.localApiClient = null;
 
+        // Set the apiclient minimum version to match the SDK
+        this._minServerVersion = MINIMUM_VERSION;
+
         Events.on(this, 'localusersignedout', (_e, logoutInfo) => {
             setUserInfo(null, null);
+            // Ensure the updated credentials are persisted to storage
+            credentialProvider.credentials(credentialProvider.credentials());
 
             if (window.NativeShell && typeof window.NativeShell.onLocalUserSignedOut === 'function') {
                 window.NativeShell.onLocalUserSignedOut(logoutInfo);
@@ -85,6 +92,10 @@ class ServerConnections extends ConnectionManager {
         return this.localApiClient;
     }
 
+    /**
+     * Gets the ApiClient that is currently connected.
+     * @returns {ApiClient|undefined} apiClient
+     */
     currentApiClient() {
         let apiClient = this.getLocalApiClient();
 
@@ -95,6 +106,18 @@ class ServerConnections extends ConnectionManager {
                 apiClient = this.getApiClient(server.Id);
             }
         }
+
+        return apiClient;
+    }
+
+    /**
+     * Gets the ApiClient that is currently connected or throws if not defined.
+     * @async
+     * @returns {Promise<ApiClient>} The current ApiClient instance.
+     */
+    async getCurrentApiClientAsync() {
+        const apiClient = this.currentApiClient();
+        if (!apiClient) throw new Error('[ServerConnection] No current ApiClient instance');
 
         return apiClient;
     }
@@ -111,12 +134,12 @@ class ServerConnections extends ConnectionManager {
     }
 }
 
-const credentials = new Credentials();
+const credentialProvider = new Credentials();
 
 const capabilities = Dashboard.capabilities(appHost);
 
 export default new ServerConnections(
-    credentials,
+    credentialProvider,
     appHost.appName(),
     appHost.appVersion(),
     appHost.deviceName(),
