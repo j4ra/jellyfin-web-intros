@@ -58,7 +58,7 @@ jobs:
         run: |
           cd web
           npm install
-          npm build:production
+          npm run build:production
           cp -r dist ../docker/
           tar czf dist.tar.gz dist
       - name: Upload web interface
